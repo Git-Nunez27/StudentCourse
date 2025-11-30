@@ -6,7 +6,7 @@ services:
     
     # Build configuration
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node server.js
     
     # Environment variables (add these in Render dashboard)
     envVars:
