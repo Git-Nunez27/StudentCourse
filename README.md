@@ -158,6 +158,217 @@ npm start
 
 ---
 
+## 🏗️ System Architecture
+
+### System Overview Diagram
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        CLIENT LAYER                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│   React Frontend (Vite)                                             │
+│   Components: Layout, Card, Button, Table, Modal, Form             │
+│   Pages: Dashboard, Students, Courses, Enrollments                 │
+│   Port: 5173 (Development)                                         │
+└────────────────────────┬────────────────────────────────────────────┘
+                         │ (HTTP/REST)
+                         │ (Axios Client)
+                         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      API LAYER (Express.js)                         │
+├─────────────────────────────────────────────────────────────────────┤
+│   Port: 3000                                                        │
+│   ┌──────────────────────────────────────────────────────────────┐ │
+│   │ Routes (3 files)                                             │ │
+│   │ • studentRoutes.js (6 endpoints)                             │ │
+│   │ • courseRoutes.js (5 endpoints)                              │ │
+│   │ • enrollmentRoutes.js (6 endpoints)                          │ │
+│   └──────────────────────────────────────────────────────────────┘ │
+│                           │                                         │
+│   ┌──────────────────────────────────────────────────────────────┐ │
+│   │ Controllers (3 files)                                        │ │
+│   │ • studentController.js → Student CRUD                        │ │
+│   │ • courseController.js → Course CRUD                          │ │
+│   │ • enrollmentController.js → Enrollment logic                 │ │
+│   └──────────────────────────────────────────────────────────────┘ │
+└────────────────────────┬────────────────────────────────────────────┘
+                         │ (Supabase JS Client)
+                         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    DATABASE LAYER (Supabase)                        │
+├─────────────────────────────────────────────────────────────────────┤
+│   PostgreSQL Cloud Database                                         │
+│   ┌──────────────────────────────────────────────────────────────┐ │
+│   │ Tables:                                                      │ │
+│   │ • students (id, name, email, phone, created_at)             │ │
+│   │ • courses (id, code, name, credits, created_at)             │ │
+│   │ • enrollments (id, student_id FK, course_id FK, grade, ...)  │ │
+│   └──────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Database Entity Relationship Diagram
+```
+┌────────────────────┐                    ┌─────────────────────┐
+│     STUDENTS       │                    │     COURSES         │
+├────────────────────┤                    ├─────────────────────┤
+│ id (PK) ◄──────────┼────────────────────┼─► id (PK)           │
+│ name               │    1            N  │ code (UNIQUE)       │
+│ email (UNIQUE)     │                    │ name                │
+│ phone              │    ┌──────────────┐│ credits             │
+│ created_at         │    │ ENROLLMENTS  ││ created_at          │
+│ updated_at         │    ├──────────────┤│ updated_at          │
+└────────────────────┘    │ id (PK)      ││                     │
+                          │ student_id ──┤┼─► (FK from COURSES)│
+                          │   (FK)       ││                     │
+                          │ course_id ───┼┘                     │
+                          │   (FK)       │                      │
+                          │ grade        │                      │
+                          │ enrolled_at  │                      │
+                          └──────────────┘                      │
+                                                               │
+                                      ┌──────────────────────┐
+                                      │  CASCADE DELETE      │
+                                      │  ON STUDENT DELETE   │
+                                      │  ON COURSE DELETE    │
+                                      └──────────────────────┘
+```
+
+### API Request Flow Diagram
+```
+CLIENT REQUEST
+      │
+      ▼
+┌─────────────────────────────┐
+│ Router (Express Route)      │
+│ Match: GET /api/students    │
+└──────────────┬──────────────┘
+               │
+               ▼
+      ┌────────────────────┐
+      │ Middleware         │
+      │ • CORS             │
+      │ • JSON parser      │
+      │ • Error handlers   │
+      └────────┬───────────┘
+               │
+               ▼
+┌──────────────────────────────┐
+│ Controller Function          │
+│ getAllStudents()             │
+└──────────────┬───────────────┘
+               │
+               ▼
+┌──────────────────────────────┐
+│ Supabase Client Query        │
+│ supabase.from('students')    │
+│   .select('*')               │
+└──────────────┬───────────────┘
+               │
+               ▼
+┌──────────────────────────────┐
+│ PostgreSQL Database          │
+│ Execute SQL Query            │
+└──────────────┬───────────────┘
+               │
+               ▼
+┌──────────────────────────────┐
+│ Parse Response               │
+│ Format JSON                  │
+└──────────────┬───────────────┘
+               │
+               ▼
+┌──────────────────────────────┐
+│ Send HTTP Response           │
+│ Status: 200 OK               │
+│ Body: [{ students data }]    │
+└──────────────┬───────────────┘
+               │
+               ▼
+         BROWSER/CLIENT
+```
+
+### Frontend Component Hierarchy
+```
+App.jsx (React Router)
+│
+├── Routes
+│   ├── Dashboard Page
+│   │   ├── Layout Component
+│   │   ├── Card Components (4x)
+│   │   │   └── Displays stats
+│   │   └── Table Component
+│   │       └── Recent data
+│   │
+│   ├── Students Page
+│   │   ├── Layout Component
+│   │   ├── Form Component
+│   │   │   └── Create/Update student
+│   │   ├── Table Component
+│   │   │   ├── Display students
+│   │   │   ├── Edit buttons
+│   │   │   └── Delete buttons
+│   │   └── Modal Component
+│   │       └── Confirmation dialogs
+│   │
+│   ├── Courses Page
+│   │   ├── Layout Component
+│   │   ├── Form Component
+│   │   ├── Table Component
+│   │   └── Modal Component
+│   │
+│   └── Enrollments Page
+│       ├── Layout Component
+│       ├── Form Component
+│       ├── Table Component
+│       └── Modal Component
+│
+└── Utilities
+    └── API Client (Axios)
+        ├── studentsAPI
+        ├── coursesAPI
+        └── enrollmentsAPI
+```
+
+### Technology Stack Visualization
+```
+FRONTEND (5173)          BACKEND (3000)           DATABASE
+─────────────            ──────────────           ────────
+
+React 18.2       ──►    Express 5.1      ──►    PostgreSQL
+├ Vite 5.0                ├ Routes                 (Supabase)
+├ Tailwind CSS 3.3        ├ Controllers
+├ Axios 1.6               ├ Middleware    Data Flow:
+├ React Router 6          └ Error Handler  JSON ──► SQL Query
+├ Lucide Icons                            Result ──► JSON
+└ TypeScript              Packages:        
+                          • CORS           Tables:
+Data Flow:                • dotenv          • students
+User Clicks               • supabase-js    • courses
+   │                                      • enrollments
+   ▼
+Component Updates
+   │
+   ▼
+Axios Request
+   │
+   ▼
+REST API Endpoint
+   │
+   ▼
+Supabase Query
+   │
+   ▼
+PostgreSQL
+   │
+   ▼
+JSON Response
+   │
+   ▼
+Frontend Updates
+```
+
+---
+
 ## 📚 API Endpoints
 
 ### Student (6 endpoints)
@@ -193,28 +404,80 @@ DELETE /api/enrollments/:id                 # Unregister from course
 
 ## 🧪 Testing
 
+### Test Case Matrix
+
+#### Student Endpoints Test Cases
+
+| # | Test Case | Method | Endpoint | Input | Expected Output | Status |
+|---|-----------|--------|----------|-------|-----------------|--------|
+| 1 | Get all students | GET | `/api/students` | None | Array of students (200) | ✅ Pass |
+| 2 | Get student by ID | GET | `/api/students/{id}` | Valid UUID | Student object (200) | ✅ Pass |
+| 3 | Create student | POST | `/api/students` | `{name, email, phone}` | Student with ID (201) | ✅ Pass |
+| 4 | Create with invalid email | POST | `/api/students` | `{name, invalid_email}` | Error message (400) | ✅ Pass |
+| 5 | Update student | PUT | `/api/students/{id}` | `{name, email, phone}` | Updated student (200) | ✅ Pass |
+| 6 | Delete student | DELETE | `/api/students/{id}` | Valid UUID | Success message (200) | ✅ Pass |
+| 7 | Delete non-existent | DELETE | `/api/students/{id}` | Invalid UUID | Not found error (404) | ✅ Pass |
+| 8 | Search student | GET | `/api/students/search/{name}` | Name string | Matching students (200) | ✅ Pass |
+
+#### Course Endpoints Test Cases
+
+| # | Test Case | Method | Endpoint | Input | Expected Output | Status |
+|---|-----------|--------|----------|-------|-----------------|--------|
+| 9 | Get all courses | GET | `/api/courses` | None | Array of courses (200) | ✅ Pass |
+| 10 | Get course by ID | GET | `/api/courses/{id}` | Valid UUID | Course object (200) | ✅ Pass |
+| 11 | Create course | POST | `/api/courses` | `{code, name, description}` | Course with ID (201) | ✅ Pass |
+| 12 | Duplicate course code | POST | `/api/courses` | Duplicate code | Error message (400) | ✅ Pass |
+| 13 | Update course | PUT | `/api/courses/{id}` | `{code, name, description}` | Updated course (200) | ✅ Pass |
+| 14 | Delete course | DELETE | `/api/courses/{id}` | Valid UUID | Success message (200) | ✅ Pass |
+
+#### Enrollment Endpoints Test Cases
+
+| # | Test Case | Method | Endpoint | Input | Expected Output | Status |
+|---|-----------|--------|----------|-------|-----------------|--------|
+| 15 | Get all enrollments | GET | `/api/enrollments` | None | Array of enrollments (200) | ✅ Pass |
+| 16 | Get enrollment by ID | GET | `/api/enrollments/{id}` | Valid UUID | Enrollment object (200) | ✅ Pass |
+| 17 | Create enrollment | POST | `/api/enrollments` | `{student_id, course_id}` | Enrollment with ID (201) | ✅ Pass |
+| 18 | Duplicate enrollment | POST | `/api/enrollments` | Duplicate student+course | Error message (400) | ✅ Pass |
+| 19 | Get student courses | GET | `/api/enrollments/student/{id}` | Valid student ID | Array of courses (200) | ✅ Pass |
+| 20 | Get course students | GET | `/api/enrollments/course/{id}` | Valid course ID | Array of students (200) | ✅ Pass |
+| 21 | Delete enrollment | DELETE | `/api/enrollments/{id}` | Valid UUID | Success message (200) | ✅ Pass |
+
 ### Postman (Recommended)
 1. Import `postman_collection.json`
 2. Import `postman_environment.json`
 3. Select "StudentCourse Dev" environment
 4. Run collection
 
-See `POSTMAN_TEST_CASES_TH.md` for 10 test scenarios.
+See `POSTMAN_TEST_CASES_TH.md` for detailed test scenarios.
 
-### curl Example
+### curl Examples
 ```bash
 # Create student
 curl -X POST http://localhost:3000/api/students \
   -H "Content-Type: application/json" \
-  -d '{"fullname":"John","email":"john@example.com","major":"IT"}'
+  -d '{"name":"John Doe","email":"john@example.com","phone":"0812345678"}'
 
 # Get all students
 curl http://localhost:3000/api/students
+
+# Create course
+curl -X POST http://localhost:3000/api/courses \
+  -H "Content-Type: application/json" \
+  -d '{"code":"CS101","name":"Introduction to Computer Science","description":"Basics"}'
+
+# Create enrollment
+curl -X POST http://localhost:3000/api/enrollments \
+  -H "Content-Type: application/json" \
+  -d '{"student_id":"uuid1","course_id":"uuid2"}'
 ```
 
 ---
 
 ## 🌳 Git & GitHub
+
+---
+
+
 
 ### Initial Setup
 ```bash
